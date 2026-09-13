@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Environment
+.env
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# Test artifacts
+*.db
+*.db-shm
+*.db-wal
