@@ -16,7 +16,7 @@
     <a href="https://github.com/Sentinel-0x/sentinel-react-engine"><strong>Explore the docs »</strong></a>
     <br />
     <br />
-    <a href="https://github.com/Sentinel-0x/ai-intelligence-agent">See it in use</a>
+    <a href="https://github.com/Sentinel-0x/ai-intel-digest">See it in use</a>
     ·
     <a href="https://github.com/Sentinel-0x/sentinel-react-engine/issues/new?labels=bug">Report Bug</a>
     ·
