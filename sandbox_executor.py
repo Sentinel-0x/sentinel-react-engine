@@ -26,7 +26,9 @@ def run_code_in_sandbox(code_str: str) -> str:
                 "docker", "run", "--rm",
                 "--network", "none",
                 "--memory", "512m",
-                "-v", f"{os.path.abspath(temp_file)}:/app/script.py",
+                "--cpus", "1.0",
+                "--user", "1000:1000",
+                "-v", f"{os.path.abspath(temp_file)}:/app/script.py:ro",
                 "python:3.10-slim",
                 "python", "/app/script.py"
             ]
