@@ -16,6 +16,7 @@ if violations:
         print(f"  - {v}")
 else:
     print("✅ AST 校验通过，正在送入 Docker 沙箱...")
-    result = run_code_in_sandbox(malicious_code)
-    print("执行结果反馈:")
-    print(result)
+    result = run_code_in_sandbox(malicious_code, caller_id="test_rce")
+    print(f"执行结果反馈 [execution_id={result['execution_id']}]:")
+    print(f"状态: {result['status']}")
+    print(f"输出: {result['output']}")

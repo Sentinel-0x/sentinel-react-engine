@@ -16,17 +16,31 @@ class ProductionReActAgent:
         last_error = None
 
         print(f"[Agent] Starting task for session: {self.session_id}")
-        
+
         while retries < self.max_retries:
             try:
-                result = run_code_in_sandbox(code_to_run)
-                if "Error" in result or "Rejected" in result:
-                    raise RuntimeError(result)
+                sandbox_result = run_code_in_sandbox(code_to_run, caller_id=self.session_id)
+
+                if sandbox_result["status"] != "success":
+                    raise RuntimeError(
+                        f"[{sandbox_result['status']}] {sandbox_result['output']} "
+                        f"(execution_id={sandbox_result['execution_id']})"
+                    )
 
                 self.state["step"] += 1
-                self.state["history"].append({"task": task_description, "status": "success", "result": result})
+                self.state["history"].append({
+                    "task": task_description,
+                    "status": "success",
+                    "result": sandbox_result["output"],
+                    "execution_id": sandbox_result["execution_id"]
+                })
                 self.memory.save_checkpoint(self.session_id, self.state)
-                return {"status": "success", "result": result, "retries": retries}
+                return {
+                    "status": "success",
+                    "result": sandbox_result["output"],
+                    "retries": retries,
+                    "execution_id": sandbox_result["execution_id"]
+                }
 
             except Exception as e:
                 retries += 1
