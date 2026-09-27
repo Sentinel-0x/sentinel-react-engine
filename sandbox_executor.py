@@ -3,8 +3,9 @@ import shutil
 import os
 import uuid
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from ast_guard import inspect_code_safety
+from security_monitor import check_and_alert
 
 logger = logging.getLogger("sandbox_executor")
 
@@ -23,6 +24,7 @@ def run_code_in_sandbox(code_str: str, caller_id: str = "unknown") -> dict:
     """
     在隔离沙箱中执行代码。
     严格要求：Docker 不可用时拒绝执行，绝不降级为裸跑。
+    每次执行结果都会经过 security_monitor 检查，触发条件时自动告警。
 
     参数:
         code_str: 要执行的代码
@@ -34,7 +36,7 @@ def run_code_in_sandbox(code_str: str, caller_id: str = "unknown") -> dict:
         status、output、timestamp 等字段，供上层做审计和监控使用。
     """
     execution_id = str(uuid.uuid4())
-    timestamp = datetime.utcnow().isoformat() + "Z"
+    timestamp = datetime.now(timezone.utc).isoformat()
 
     log_context = f"[execution_id={execution_id}] [caller={caller_id}]"
 
@@ -51,6 +53,7 @@ def run_code_in_sandbox(code_str: str, caller_id: str = "unknown") -> dict:
         result["status"] = "rejected_by_ast_guard"
         result["output"] = "\n".join([f" - {v}" for v in violations])
         logger.warning(f"{log_context} REJECTED by AST guard: {violations}")
+        check_and_alert(result)
         return result
 
     if not check_docker_available():
@@ -60,6 +63,7 @@ def run_code_in_sandbox(code_str: str, caller_id: str = "unknown") -> dict:
             "than falling back to an unsandboxed environment."
         )
         logger.error(f"{log_context} REFUSED: Docker unavailable, no fallback permitted")
+        check_and_alert(result)
         return result
 
     temp_file = f"temp_sandbox_{execution_id}.py"
@@ -99,4 +103,5 @@ def run_code_in_sandbox(code_str: str, caller_id: str = "unknown") -> dict:
         if os.path.exists(temp_file):
             os.remove(temp_file)
 
+    check_and_alert(result)
     return result
