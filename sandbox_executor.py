@@ -20,23 +20,25 @@ def check_docker_available():
         return False
 
 
+def _kill_container(container_name: str):
+    """强制杀死并清理指定名字的容器，用于超时后的主动清理"""
+    try:
+        subprocess.run(["docker", "kill", container_name], capture_output=True, text=True, timeout=5)
+        logger.warning(f"Forcefully killed container: {container_name}")
+    except Exception as e:
+        logger.error(f"Failed to kill container {container_name}: {e}")
+
+
 def run_code_in_sandbox(code_str: str, caller_id: str = "unknown") -> dict:
     """
     在隔离沙箱中执行代码。
     严格要求：Docker 不可用时拒绝执行，绝不降级为裸跑。
-    每次执行结果都会经过 security_monitor 检查，触发条件时自动告警。
-
-    参数:
-        code_str: 要执行的代码
-        caller_id: 调用者标识（比如 "job-hunter-agent"、"test_rce"），
-                   用于审计追责。不传则记为 "unknown"，但会被日志明确标注。
-
-    返回:
-        dict，包含 execution_id（本次执行的唯一编号）、caller_id、
-        status、output、timestamp 等字段，供上层做审计和监控使用。
+    超时发生时，主动 kill 容器，不依赖 --rm 被动清理（--rm 只在容器
+    正常退出时生效，对死循环等永不退出的代码无效）。
     """
     execution_id = str(uuid.uuid4())
     timestamp = datetime.now(timezone.utc).isoformat()
+    container_name = f"sandbox_{execution_id}"
 
     log_context = f"[execution_id={execution_id}] [caller={caller_id}]"
 
@@ -70,11 +72,12 @@ def run_code_in_sandbox(code_str: str, caller_id: str = "unknown") -> dict:
     with open(temp_file, "w", encoding="utf-8") as f:
         f.write(code_str)
 
-    logger.info(f"{log_context} STARTING execution in Docker sandbox")
+    logger.info(f"{log_context} STARTING execution in Docker sandbox (container={container_name})")
 
     try:
         cmd = [
             "docker", "run", "--rm",
+            "--name", container_name,
             "--network", "none",
             "--memory", "512m",
             "--cpus", "1.0",
@@ -96,8 +99,9 @@ def run_code_in_sandbox(code_str: str, caller_id: str = "unknown") -> dict:
 
     except subprocess.TimeoutExpired:
         result["status"] = "timeout"
-        result["output"] = "Execution timed out in Docker sandbox."
-        logger.warning(f"{log_context} TIMEOUT")
+        result["output"] = "Execution timed out and container was forcefully terminated."
+        logger.warning(f"{log_context} TIMEOUT — forcefully killing container")
+        _kill_container(container_name)
 
     finally:
         if os.path.exists(temp_file):
