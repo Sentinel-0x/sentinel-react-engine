@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install pytest
+
+      - name: Syntax check
+        run: |
+          python -m py_compile sandbox_executor.py ast_guard.py security_monitor.py agent_core/react_agent.py agent_core/memory.py
+
+      - name: Run unit tests (Docker available)
+        run: python -m pytest test_workflow_fixes.py -v
+
+      - name: Verify AST guard still blocks malicious code
+        run: python test_rce.py
+
+      - name: Stop Docker daemon to test isolation-refusal behavior
+        run: sudo systemctl stop docker
+
+      - name: Verify system refuses execution without Docker (no unsandboxed fallback)
+        run: |
+          python -c "
+          from sandbox_executor import run_code_in_sandbox
+          result = run_code_in_sandbox('print(1)', caller_id='ci_test')
+          assert result['status'] == 'refused_no_isolation', f'Expected refusal, got {result[\"status\"]}'
+          print('PASS: system correctly refused execution without Docker isolation')
+          "
