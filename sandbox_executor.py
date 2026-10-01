@@ -2,6 +2,7 @@ import subprocess
 import shutil
 import os
 import uuid
+import tempfile
 import logging
 from datetime import datetime, timezone
 from ast_guard import inspect_code_safety
@@ -68,7 +69,8 @@ def run_code_in_sandbox(code_str: str, caller_id: str = "unknown") -> dict:
         check_and_alert(result)
         return result
 
-    temp_file = f"temp_sandbox_{execution_id}.py"
+    temp_dir = tempfile.mkdtemp(prefix="sentinel_sandbox_")
+    temp_file = os.path.join(temp_dir, f"script_{execution_id}.py")
     with open(temp_file, "w", encoding="utf-8") as f:
         f.write(code_str)
 
@@ -106,6 +108,8 @@ def run_code_in_sandbox(code_str: str, caller_id: str = "unknown") -> dict:
     finally:
         if os.path.exists(temp_file):
             os.remove(temp_file)
+        if os.path.isdir(temp_dir):
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
     check_and_alert(result)
     return result
