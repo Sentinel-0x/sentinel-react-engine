@@ -30,7 +30,7 @@ jobs:
         run: python test_rce.py
 
       - name: Stop Docker daemon to test isolation-refusal behavior
-        run: sudo systemctl stop docker
+        run: sudo systemctl stop docker.service docker.socket
 
       - name: Verify system refuses execution without Docker (no unsandboxed fallback)
         run: |
