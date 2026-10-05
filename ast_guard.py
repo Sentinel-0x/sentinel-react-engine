@@ -14,10 +14,10 @@ class SecurityASTVisitor(ast.NodeVisitor):
     def visit_Import(self, node):
         for alias in node.names:
             base_name = alias.name.split('.')[0]
+            bound_name = alias.asname or base_name
             if base_name in self.banned_modules:
                 self.violations.append(f"Banned module import detected: {alias.name}")
-            bound_name = alias.asname or base_name
-            self.tainted_names.add(bound_name)
+                self.tainted_names.add(bound_name)
         self.generic_visit(node)
 
     def visit_ImportFrom(self, node):
@@ -25,9 +25,9 @@ class SecurityASTVisitor(ast.NodeVisitor):
             base_name = node.module.split('.')[0]
             if base_name in self.banned_modules:
                 self.violations.append(f"Banned import from module detected: {node.module}")
-        for alias in node.names:
-            bound_name = alias.asname or alias.name
-            self.tainted_names.add(bound_name)
+                for alias in node.names:
+                    bound_name = alias.asname or alias.name
+                    self.tainted_names.add(bound_name)
         self.generic_visit(node)
 
     def visit_Assign(self, node):
