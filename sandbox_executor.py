@@ -113,3 +113,90 @@ def run_code_in_sandbox(code_str: str, caller_id: str = "unknown") -> dict:
 
     check_and_alert(result)
     return result
+
+
+def run_code_in_sandbox_with_network(code_str: str, caller_id: str = "unknown") -> dict:
+    """
+    与 run_code_in_sandbox 相同的安全模型，唯一区别：
+    容器接入 sandbox_net 专用网络，所有出站流量强制经过 whitelist_proxy（Squid白名单代理）。
+    容器本身依然不能直接连公网，只能到达代理，代理只放行白名单域名。
+    仅当任务明确需要网络访问（如pip安装包）时才使用此函数，默认应使用完全断网的 run_code_in_sandbox。
+    """
+    execution_id = str(uuid.uuid4())
+    timestamp = datetime.now(timezone.utc).isoformat()
+    container_name = f"sandbox_net_{execution_id}"
+
+    log_context = f"[execution_id={execution_id}] [caller={caller_id}] [networked]"
+
+    result = {
+        "execution_id": execution_id,
+        "caller_id": caller_id,
+        "timestamp": timestamp,
+        "status": None,
+        "output": None,
+    }
+
+    violations = inspect_code_safety(code_str)
+    if violations:
+        result["status"] = "rejected_by_ast_guard"
+        result["output"] = "\n".join([f" - {v}" for v in violations])
+        logger.warning(f"{log_context} REJECTED by AST guard: {violations}")
+        check_and_alert(result)
+        return result
+
+    if not check_docker_available():
+        result["status"] = "refused_no_isolation"
+        result["output"] = (
+            "Docker is not available on this host. Execution refused rather "
+            "than falling back to an unsandboxed environment."
+        )
+        logger.error(f"{log_context} REFUSED: Docker unavailable, no fallback permitted")
+        check_and_alert(result)
+        return result
+
+    temp_dir = tempfile.mkdtemp(prefix="sentinel_sandbox_net_")
+    temp_file = os.path.join(temp_dir, f"script_{execution_id}.py")
+    with open(temp_file, "w", encoding="utf-8") as f:
+        f.write(code_str)
+
+    logger.info(f"{log_context} STARTING execution in networked (whitelist-proxied) sandbox")
+
+    try:
+        cmd = [
+            "docker", "run", "--rm",
+            "--name", container_name,
+            "--network", "sandbox_net",
+            "--memory", "512m",
+            "--cpus", "1.0",
+            "--user", "1000:1000",
+            "-e", "HTTP_PROXY=http://whitelist_proxy:3128",
+            "-e", "HTTPS_PROXY=http://whitelist_proxy:3128",
+            "-v", f"{os.path.abspath(temp_file)}:/app/script.py:ro",
+            "sentinel-sandbox-networked:latest",
+            "python", "/app/script.py"
+        ]
+        proc_result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+
+        if proc_result.returncode == 0:
+            result["status"] = "success"
+            result["output"] = proc_result.stdout.strip()
+            logger.info(f"{log_context} SUCCESS")
+        else:
+            result["status"] = "execution_error"
+            result["output"] = proc_result.stderr.strip()
+            logger.warning(f"{log_context} EXECUTION ERROR: {proc_result.stderr.strip()[:200]}")
+
+    except subprocess.TimeoutExpired:
+        result["status"] = "timeout"
+        result["output"] = "Execution timed out and container was forcefully terminated."
+        logger.warning(f"{log_context} TIMEOUT — forcefully killing container")
+        _kill_container(container_name)
+
+    finally:
+        if os.path.exists(temp_file):
+            os.remove(temp_file)
+        if os.path.isdir(temp_dir):
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    check_and_alert(result)
+    return result
