@@ -21,10 +21,10 @@ jobs:
 
       - name: Syntax check
         run: |
-          python -m py_compile sandbox_executor.py ast_guard.py security_monitor.py agent_core/react_agent.py agent_core/memory.py
+          python -m py_compile sandbox_executor.py ast_guard.py policy.py security_monitor.py agent_core/react_agent.py agent_core/memory.py
 
       - name: Run unit tests (Docker available)
-        run: python -m pytest test_workflow_fixes.py -v
+        run: python -m pytest test_workflow_fixes.py test_policy_layer.py -v
 
       - name: Verify AST guard still blocks malicious code
         run: python test_rce.py
@@ -34,14 +34,14 @@ jobs:
 
       - name: Start whitelist proxy and network
         run: |
-          docker network create sandbox_net
+          docker network create --internal sandbox_net
           docker run -d --name whitelist_proxy --network bridge \
             -v $(pwd)/proxy_config/squid.conf:/etc/squid/squid.conf:ro \
             -p 3128:3128 ubuntu/squid:latest
           docker network connect sandbox_net whitelist_proxy
           sleep 5
 
-      - name: Verify whitelist allows pypi.org but blocks everything else
+      - name: Verify network boundaries (whitelist, direct-connection block, offline mode)
         run: python ci_test_network_sandbox.py
 
       - name: Stop Docker daemon to test isolation-refusal behavior

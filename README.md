@@ -111,7 +111,7 @@ Every piece of code passes through `ast_guard.py` before execution — blocking 
 | Sandbox Executor | `sandbox_executor.py` | Fail-closed Docker isolated execution, with execution/caller ID tracking |
 | Memory & Checkpointing | `agent_core/memory.py` | `SQLiteMemoryStore` persists session state so crashed workflows resume exactly where they left off |
 | Security Monitor | `security_monitor.py` | Persists AST-rejection history to SQLite and sends Telegram alerts on isolation failure or burst rejections from one caller |
-| Networked Sandbox | `sandbox_executor.py`, `sandbox.dockerfile`, `proxy_config/` | Optional mode routing all egress through a Squid domain-whitelist proxy; image ships a fixed, pre-reviewed dependency set (no runtime `pip install`) |
+| Networked Sandbox | `sandbox_executor.py`, `sandbox.dockerfile`, `proxy_config/` | Optional mode on an internal Docker network whose only route out is a Squid domain-whitelist proxy (a test asserts direct connections fail); image ships a fixed, pre-reviewed dependency set. Runtime `pip install` is discouraged only by the AST guard's `subprocess` ban, which has known bypasses |
 
 State is stored via:
 ```sql
