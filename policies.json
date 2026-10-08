@@ -1,0 +1,20 @@
+{
+  "profiles": {
+    "offline_default": {
+      "network": "none",
+      "image": "python:3.10-slim",
+      "allowed_imports": ["math", "json", "re", "datetime", "time", "collections", "itertools", "functools", "statistics", "string", "random", "decimal", "fractions", "textwrap", "typing", "dataclasses"],
+      "memory": "512m",
+      "cpus": 1.0,
+      "timeout_seconds": 15
+    },
+    "web_whitelisted": {
+      "network": "whitelist_proxy",
+      "image": "sentinel-sandbox-networked:latest",
+      "allowed_imports": ["requests", "pandas", "bs4", "urllib", "json", "re", "datetime", "time", "math", "collections", "itertools", "typing"],
+      "memory": "512m",
+      "cpus": 1.0,
+      "timeout_seconds": 30
+    }
+  }
+}

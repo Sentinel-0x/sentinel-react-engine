@@ -1,10 +1,16 @@
 import ast
 
+BANNED_MODULES = frozenset({'os', 'sys', 'subprocess', 'shutil', 'socket', 'ctypes', 'pickle', 'pty', 'fcntl'})
+BANNED_FUNCTIONS = frozenset({'system', 'popen', 'eval', 'exec', 'compile', 'getattr', 'setattr', '__import__', 'vars', 'globals', 'locals'})
+
+
 class SecurityASTVisitor(ast.NodeVisitor):
-    def __init__(self):
+    def __init__(self, allowed_imports=None):
         self.violations = []
-        self.banned_modules = {'os', 'sys', 'subprocess', 'shutil', 'socket', 'ctypes', 'pickle', 'pty', 'fcntl'}
-        self.banned_functions = {'system', 'popen', 'eval', 'exec', 'compile', 'getattr', 'setattr', '__import__', 'vars', 'globals', 'locals'}
+        self.banned_modules = set(BANNED_MODULES)
+        self.banned_functions = set(BANNED_FUNCTIONS)
+        # None = 不启用白名单（保持旧行为）；集合 = 只允许其中的顶层模块
+        self.allowed_imports = allowed_imports
         # 追踪被赋值为危险函数/模块的变量名，防止 "e = eval; e(...)" 这类别名绕过
         self.tainted_names = set()
 
@@ -18,6 +24,8 @@ class SecurityASTVisitor(ast.NodeVisitor):
             if base_name in self.banned_modules:
                 self.violations.append(f"Banned module import detected: {alias.name}")
                 self.tainted_names.add(bound_name)
+            elif self.allowed_imports is not None and base_name not in self.allowed_imports:
+                self.violations.append(f"Import not permitted by policy: {alias.name}")
         self.generic_visit(node)
 
     def visit_ImportFrom(self, node):
@@ -28,6 +36,10 @@ class SecurityASTVisitor(ast.NodeVisitor):
                 for alias in node.names:
                     bound_name = alias.asname or alias.name
                     self.tainted_names.add(bound_name)
+            elif self.allowed_imports is not None and base_name not in self.allowed_imports:
+                self.violations.append(f"Import not permitted by policy: {node.module}")
+        elif self.allowed_imports is not None:
+            self.violations.append("Relative import not permitted by policy")
         self.generic_visit(node)
 
     def visit_Assign(self, node):
@@ -64,11 +76,13 @@ class SecurityASTVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
 
-def inspect_code_safety(code_str: str) -> list:
+def inspect_code_safety(code_str: str, allowed_imports=None) -> list:
     try:
         tree = ast.parse(code_str)
     except SyntaxError as e:
         return [f"SyntaxError in code: {e}"]
-    visitor = SecurityASTVisitor()
+    visitor = SecurityASTVisitor(
+        allowed_imports=None if allowed_imports is None else set(allowed_imports)
+    )
     visitor.visit(tree)
     return visitor.violations
