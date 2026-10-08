@@ -11,7 +11,7 @@
   <h3 align="center">🛡️ Sentinel ReAct Engine</h3>
 
   <p align="center">
-    A lightweight, production-grade agent runtime engine — AST security guard, Docker sandbox with fallback, and SQLite state persistence.
+    A lightweight, production-grade agent runtime engine — AST security guard, fail-closed Docker sandbox, real-time security alerting, and SQLite state persistence.
     <br />
     <a href="https://github.com/Sentinel-0x/sentinel-react-engine"><strong>Explore the docs »</strong></a>
     <br />
@@ -67,7 +67,7 @@ Sentinel ReAct Engine is a small, dependency-light core addressing all three —
 ### Prerequisites
 
 * Python 3.10+
-* Docker (optional — the engine falls back to a local subprocess sandbox if Docker isn't available)
+* Docker (required — the engine refuses to execute code if Docker isn't available; there is no unsandboxed fallback)
 
 ### Installation
 
@@ -98,7 +98,7 @@ print(result)
 # {'status': 'success', 'result': 'hello from sandbox', 'retries': 0}
 ```
 
-Every piece of code passes through `ast_guard.py` before execution — blocking banned imports (`os`, `subprocess`, `shutil`, `socket`) and high-risk calls (`eval()`, `exec()`, `os.system()`). Execution then runs in `sandbox_executor.py`: it checks Docker availability first (`--network none --memory 512m`), and transparently falls back to a time-boxed local `subprocess` if Docker isn't available.
+Every piece of code passes through `ast_guard.py` before execution — blocking banned imports (`os`, `subprocess`, `shutil`, `socket`) and high-risk calls (`eval()`, `exec()`, `os.system()`). Execution then runs in `sandbox_executor.py`: it checks Docker availability first and, if Docker is unavailable, refuses to execute rather than falling back to the host. When Docker is available, code runs with `--network none --memory 512m --cpus 1.0 --user 1000:1000` and a read-only mount; on timeout the container is actively killed.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -108,8 +108,10 @@ Every piece of code passes through `ast_guard.py` before execution — blocking 
 |---|---|---|
 | ReAct Loop | `agent_core/react_agent.py` | Runs a task, retries on failure up to `max_retries`, checkpoints state after every attempt |
 | Static AST Guard | `ast_guard.py` | Parses code via `ast` before execution; blocks dangerous imports and calls |
-| Sandbox Executor | `sandbox_executor.py` | Docker-first, subprocess-fallback isolated execution |
+| Sandbox Executor | `sandbox_executor.py` | Fail-closed Docker isolated execution, with execution/caller ID tracking |
 | Memory & Checkpointing | `agent_core/memory.py` | `SQLiteMemoryStore` persists session state so crashed workflows resume exactly where they left off |
+| Security Monitor | `security_monitor.py` | Persists AST-rejection history to SQLite and sends Telegram alerts on isolation failure or burst rejections from one caller |
+| Networked Sandbox | `sandbox_executor.py`, `sandbox.dockerfile`, `proxy_config/` | Optional mode routing all egress through a Squid domain-whitelist proxy; image ships a fixed, pre-reviewed dependency set (no runtime `pip install`) |
 
 State is stored via:
 ```sql
@@ -125,11 +127,17 @@ CREATE TABLE IF NOT EXISTS checkpoints (
 ## Roadmap
 
 - [x] AST static security guard
-- [x] Docker sandbox with local subprocess fallback
+- [x] Fail-closed Docker sandbox (no unsandboxed fallback)
 - [x] SQLite session checkpointing
 - [x] Self-healing retry loop
+- [x] Active container kill on timeout
+- [x] Execution ID and caller ID audit tracking
+- [x] Persistent security monitoring with Telegram alerts
+- [x] Whitelisted-network sandbox mode (Squid proxy)
+- [x] CI: syntax check, unit tests, AST guard, whitelist and fail-closed verification
 - [ ] LLM-driven auto code-repair on failure (see `experimental/agent_loop.py`)
-- [ ] Integrate into `job-hunter-agent`
+- [ ] Authentication and rate limiting (`caller_id` is currently a self-reported label, not an authenticated identity)
+- [ ] Adversarial testing (no container-escape or sustained-attack testing has been performed)
 - [ ] Publish as an installable pip package
 
 See the [open issues](https://github.com/Sentinel-0x/sentinel-react-engine/issues) for a full list of proposed features.
