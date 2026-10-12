@@ -15,3 +15,12 @@ venv/
 *.db
 *.db-shm
 *.db-wal
+
+# runtime files and local snapshots
+*.log
+*.db
+*.db-shm
+*.db-wal
+junit/
+__pycache__/
+*.pyc
