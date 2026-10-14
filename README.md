@@ -75,11 +75,22 @@ Sentinel ReAct Engine is a small, dependency-light core addressing all three —
 ```sh
    git clone https://github.com/Sentinel-0x/sentinel-react-engine.git
    cd sentinel-react-engine
+   pip install -r requirements.txt
+   # experimental/agent_loop.py additionally needs: pip install -r requirements-experimental.txt
 ```
 2. Run the security test suite
 ```sh
    python3 test_rce.py
-   python3 -m unittest test_workflow_fixes.py -v
+   # pull the sandbox base image once up front, so the 15s test timeout isn't spent on the download
+   docker pull python:3.10-slim
+   # unit tests (test_workflow_fixes needs a running Docker daemon)
+   python3 -m unittest test_workflow_fixes.py test_policy_layer.py -v
+   # optional: networked-sandbox checks (same steps as .github/workflows/ci.yml)
+   docker build -t sentinel-sandbox-networked:latest -f sandbox.dockerfile .
+   docker network create --internal sandbox_net
+   docker run -d --name whitelist_proxy --network bridge -v "$(pwd)/proxy_config/squid.conf:/etc/squid/squid.conf:ro" -p 3128:3128 ubuntu/squid:latest
+   docker network connect sandbox_net whitelist_proxy
+   python3 ci_test_network_sandbox.py
 ```
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
