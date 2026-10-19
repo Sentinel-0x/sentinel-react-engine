@@ -37,7 +37,7 @@ jobs:
           docker network create --internal sandbox_net
           docker run -d --name whitelist_proxy --network bridge \
             -v $(pwd)/proxy_config/squid.conf:/etc/squid/squid.conf:ro \
-            -p 3128:3128 ubuntu/squid:latest
+            ubuntu/squid:latest
           docker network connect sandbox_net whitelist_proxy
           sleep 5
 

@@ -88,7 +88,7 @@ Sentinel ReAct Engine is a small, dependency-light core addressing all three —
    # optional: networked-sandbox checks (same steps as .github/workflows/ci.yml)
    docker build -t sentinel-sandbox-networked:latest -f sandbox.dockerfile .
    docker network create --internal sandbox_net
-   docker run -d --name whitelist_proxy --network bridge -v "$(pwd)/proxy_config/squid.conf:/etc/squid/squid.conf:ro" -p 3128:3128 ubuntu/squid:latest
+   docker run -d --name whitelist_proxy --network bridge -v "$(pwd)/proxy_config/squid.conf:/etc/squid/squid.conf:ro" ubuntu/squid:latest
    docker network connect sandbox_net whitelist_proxy
    python3 ci_test_network_sandbox.py
 ```
