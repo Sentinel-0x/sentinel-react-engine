@@ -17,7 +17,7 @@ class TestWorkflowFixes(unittest.TestCase):
 
     def test_react_agent_max_retries_circuit_breaker(self):
         """验证：当代码持续触发安全拦截时，达到最大重试次数后应正确熔断"""
-        agent = ProductionReActAgent(session_id=self.test_session, max_retries=3)
+        agent = ProductionReActAgent(session_id=self.test_session, max_retries=3, db_path=self.test_db)
         malicious_code = 'import os; os.system("ls")'
 
         res = agent.execute_task("test malicious task", malicious_code)
@@ -27,7 +27,7 @@ class TestWorkflowFixes(unittest.TestCase):
 
     def test_react_agent_success_on_valid_code(self):
         """验证：合法代码应成功执行并记录到 checkpoint"""
-        agent = ProductionReActAgent(session_id=self.test_session, max_retries=3)
+        agent = ProductionReActAgent(session_id=self.test_session, max_retries=3, db_path=self.test_db)
         safe_code = 'print("Workflow sandbox active")'
 
         res = agent.execute_task("test safe task", safe_code)

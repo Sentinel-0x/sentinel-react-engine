@@ -3,10 +3,15 @@ from agent_core.memory import SQLiteMemoryStore
 from sandbox_executor import run_code_in_sandbox
 
 class ProductionReActAgent:
-    def __init__(self, session_id: str = "default_session", max_retries: int = 3):
+    def __init__(
+        self, session_id: str = "default_session",
+        max_retries: int = 3,
+        db_path: str = "agent_state.db",
+    ):
         self.session_id = session_id
         self.max_retries = max_retries
-        self.memory = SQLiteMemoryStore()
+        self.db_path = db_path
+        self.memory = SQLiteMemoryStore(db_path=db_path)
         self.state = self.memory.load_checkpoint(self.session_id)
         if not self.state:
             self.state = {"step": 0, "history": []}
@@ -19,7 +24,7 @@ class ProductionReActAgent:
 
         while retries < self.max_retries:
             try:
-                sandbox_result = run_code_in_sandbox(code_to_run, caller_id=self.session_id)
+                sandbox_result = run_code_in_sandbox(code_to_run, caller_id=self.session_id, security_db_path=self.db_path)
 
                 if sandbox_result["status"] != "success":
                     raise RuntimeError(

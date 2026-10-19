@@ -1,5 +1,4 @@
 from ast_guard import inspect_code_safety
-from sandbox_executor import run_code_in_sandbox
 
 malicious_code = """
 import os
@@ -7,16 +6,25 @@ print("=== 尝试读取容器内 passwd ===")
 os.system('cat /etc/passwd')
 """
 
-print("正在通过 AST 静态网关对代码进行安全预检...")
-violations = inspect_code_safety(malicious_code)
+def main():
+    print("正在通过 AST 静态网关对代码进行安全预检...")
+    violations = inspect_code_safety(malicious_code)
 
-if violations:
-    print("❌ [AST 拦截生效] 发现高危违规调用，拒绝送入沙箱：")
-    for v in violations:
-        print(f"  - {v}")
-else:
-    print("✅ AST 校验通过，正在送入 Docker 沙箱...")
-    result = run_code_in_sandbox(malicious_code, caller_id="test_rce")
-    print(f"执行结果反馈 [execution_id={result['execution_id']}]:")
-    print(f"状态: {result['status']}")
-    print(f"输出: {result['output']}")
+    # 如果没有发现违规，立即让测试失败；绝不运行危险代码
+    assert violations, (
+        "FAIL: AST guard 没有拦截危险代码，测试失败。"
+    )
+
+    assert any("os" in item for item in violations), (
+        "FAIL: 没有识别出 os 模块相关违规。"
+    )
+    assert any("system" in item for item in violations), (
+        "FAIL: 没有识别出 system 调用相关违规。"
+    )
+
+    print("PASS: AST guard 成功拦截危险代码，代码未送入沙箱。")
+    for item in violations:
+        print(f" - {item}")
+
+if __name__ == "__main__":
+    main()

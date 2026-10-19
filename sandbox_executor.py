@@ -30,7 +30,7 @@ def _kill_container(container_name: str):
         logger.error(f"Failed to kill container {container_name}: {e}")
 
 
-def run_code_in_sandbox(code_str: str, caller_id: str = "unknown") -> dict:
+def run_code_in_sandbox(code_str: str, caller_id: str = "unknown", security_db_path: str = "agent_state.db") -> dict:
     """
     在隔离沙箱中执行代码。
     严格要求：Docker 不可用时拒绝执行，绝不降级为裸跑。
@@ -56,7 +56,7 @@ def run_code_in_sandbox(code_str: str, caller_id: str = "unknown") -> dict:
         result["status"] = "rejected_by_ast_guard"
         result["output"] = "\n".join([f" - {v}" for v in violations])
         logger.warning(f"{log_context} REJECTED by AST guard: {violations}")
-        check_and_alert(result)
+        check_and_alert(result, db_path=security_db_path)
         return result
 
     if not check_docker_available():
@@ -66,7 +66,7 @@ def run_code_in_sandbox(code_str: str, caller_id: str = "unknown") -> dict:
             "than falling back to an unsandboxed environment."
         )
         logger.error(f"{log_context} REFUSED: Docker unavailable, no fallback permitted")
-        check_and_alert(result)
+        check_and_alert(result, db_path=security_db_path)
         return result
 
     temp_dir = tempfile.mkdtemp(prefix="sentinel_sandbox_")
@@ -83,6 +83,7 @@ def run_code_in_sandbox(code_str: str, caller_id: str = "unknown") -> dict:
             "--network", "none",
             "--memory", "512m",
             "--cpus", "1.0",
+            "--pids-limit", "64",
             "--user", "1000:1000",
             "-v", f"{os.path.abspath(temp_file)}:/app/script.py:ro",
             "python:3.10-slim",
@@ -111,11 +112,11 @@ def run_code_in_sandbox(code_str: str, caller_id: str = "unknown") -> dict:
         if os.path.isdir(temp_dir):
             shutil.rmtree(temp_dir, ignore_errors=True)
 
-    check_and_alert(result)
+    check_and_alert(result, db_path=security_db_path)
     return result
 
 
-def run_code_in_sandbox_with_network(code_str: str, caller_id: str = "unknown") -> dict:
+def run_code_in_sandbox_with_network(code_str: str, caller_id: str = "unknown", security_db_path: str = "agent_state.db") -> dict:
     """
     与 run_code_in_sandbox 相同的安全模型，唯一区别：
     容器接入 sandbox_net 专用网络，所有出站流量强制经过 whitelist_proxy（Squid白名单代理）。
@@ -141,7 +142,7 @@ def run_code_in_sandbox_with_network(code_str: str, caller_id: str = "unknown") 
         result["status"] = "rejected_by_ast_guard"
         result["output"] = "\n".join([f" - {v}" for v in violations])
         logger.warning(f"{log_context} REJECTED by AST guard: {violations}")
-        check_and_alert(result)
+        check_and_alert(result, db_path=security_db_path)
         return result
 
     if not check_docker_available():
@@ -151,7 +152,7 @@ def run_code_in_sandbox_with_network(code_str: str, caller_id: str = "unknown") 
             "than falling back to an unsandboxed environment."
         )
         logger.error(f"{log_context} REFUSED: Docker unavailable, no fallback permitted")
-        check_and_alert(result)
+        check_and_alert(result, db_path=security_db_path)
         return result
 
     temp_dir = tempfile.mkdtemp(prefix="sentinel_sandbox_net_")
@@ -168,6 +169,7 @@ def run_code_in_sandbox_with_network(code_str: str, caller_id: str = "unknown") 
             "--network", "sandbox_net",
             "--memory", "512m",
             "--cpus", "1.0",
+            "--pids-limit", "64",
             "--user", "1000:1000",
             "-e", "HTTP_PROXY=http://whitelist_proxy:3128",
             "-e", "HTTPS_PROXY=http://whitelist_proxy:3128",
@@ -198,5 +200,5 @@ def run_code_in_sandbox_with_network(code_str: str, caller_id: str = "unknown") 
         if os.path.isdir(temp_dir):
             shutil.rmtree(temp_dir, ignore_errors=True)
 
-    check_and_alert(result)
+    check_and_alert(result, db_path=security_db_path)
     return result

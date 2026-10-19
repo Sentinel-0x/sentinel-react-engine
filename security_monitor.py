@@ -13,8 +13,8 @@ BURST_WINDOW_SECONDS = 300  # 5分钟
 DB_PATH = "agent_state.db"  # 与 SQLiteMemoryStore 共用同一数据库文件，独立建表
 
 
-def _init_db():
-    conn = sqlite3.connect(DB_PATH)
+def _init_db(db_path: str = DB_PATH):
+    conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS security_events (
@@ -29,10 +29,10 @@ def _init_db():
     conn.close()
 
 
-def _record_rejection(caller_id: str, execution_id: str):
+def _record_rejection(caller_id: str, execution_id: str, db_path: str = DB_PATH):
     """把一次AST拦截事件写入持久化存储，跨进程重启依然保留"""
-    _init_db()
-    conn = sqlite3.connect(DB_PATH)
+    _init_db(db_path)
+    conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cursor.execute(
         'INSERT INTO security_events (caller_id, execution_id, event_type, timestamp) VALUES (?, ?, ?, ?)',
@@ -42,10 +42,10 @@ def _record_rejection(caller_id: str, execution_id: str):
     conn.close()
 
 
-def _count_recent_rejections(caller_id: str) -> int:
+def _count_recent_rejections(caller_id: str, db_path: str = DB_PATH) -> int:
     """查询某个caller在时间窗口内的拦截次数，从持久化存储读取，不依赖进程内存"""
-    _init_db()
-    conn = sqlite3.connect(DB_PATH)
+    _init_db(db_path)
+    conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cutoff = time.time() - BURST_WINDOW_SECONDS
     cursor.execute(
@@ -66,12 +66,13 @@ def send_telegram_alert(text: str):
         return
     try:
         url = f"https://api.telegram.org/bot{token}/sendMessage"
-        requests.post(url, json={"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}, timeout=10)
+        response = requests.post(url, json={"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}, timeout=10)
+        response.raise_for_status()
     except Exception as e:
         logger.error(f"安全告警发送失败: {e}")
 
 
-def check_and_alert(sandbox_result: dict):
+def check_and_alert(sandbox_result: dict, db_path: str = DB_PATH):
     """
     检查一次沙箱执行结果，判断是否需要触发安全告警。
     规则1：refused_no_isolation 出现一次即告警（隔离失效）
@@ -93,8 +94,8 @@ def check_and_alert(sandbox_result: dict):
         return
 
     if status == "rejected_by_ast_guard":
-        _record_rejection(caller_id, execution_id)
-        recent_count = _count_recent_rejections(caller_id)
+        _record_rejection(caller_id, execution_id, db_path)
+        recent_count = _count_recent_rejections(caller_id, db_path)
 
         if recent_count >= BURST_THRESHOLD:
             alert_text = (
